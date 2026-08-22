@@ -68,7 +68,7 @@ jobs:
             for pid in "${PIDS[@]}"; do
               if ! kill -0 $pid 2>/dev/null; then
                 echo "Instance PID $pid died, restarting..."
-                python3 app.py &
+                python3 app.py
                 NEW_PIDS+=($!)
                 echo "Restarted instance (new PID: ${NEW_PIDS[-1]})"
               else
