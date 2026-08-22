@@ -50,7 +50,7 @@ jobs:
           #!/bin/bash
           
           PIDS=()
-          NUM_INSTANCES=2
+          NUM_INSTANCES=1
           
           # Start initial batch
           for i in $(seq 1 $NUM_INSTANCES); do
