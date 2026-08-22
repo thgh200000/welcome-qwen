@@ -1,67 +1,46 @@
-name: SSH Debug Session with Web Shell
+name: SSH Debug Session with Custom Key
 
 on:
   workflow_dispatch:
-    inputs:
-      enable_debug:
-        description: 'Enable tmate debugging session'
-        required: false
-        default: 'true'
 
 jobs:
-  debug-with-tmate:
+  debug:
     runs-on: ubuntu-latest
     steps:
-      # Checkout your repository (optional)
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Set up tmate session in detached mode to get outputs
-      - name: Setup tmate session
+      - name: Setup tmate session with Custom Key
         id: tmate
         uses: mxschmitt/action-tmate@v3
         with:
+          # Your provided ECDSA public key
+          ssh-key: "ecdsa-sha2-nistp384 AAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAAAIbmlzdHAzODQAAABhBMxYu9hPmYvBcj+pa3NYiCWjHa6sqXy0QnA3pGSKyty1C30LoDmZkkjpdVNm1cen/jmZNbOGp4ef1Q1tYVetwOAEo8vH4dXCeIGbumlU2BgCQUJUbe71BTZjF/IbhroW5w== first@first-PC"
           limit-access-to-actor: false
           detached: true
-
-      # Explicitly disable secret masking for this step
-      - name: Disable masking and show raw tmate info
-        run: |
-          echo "::remove-masking::true"
-          echo "Raw tmate outputs:"
-          echo "WEB_URL=${{ steps.tmate.outputs.web-url }}"
-          echo "SSH_CMD=${{ steps.tmate.outputs.ssh-command }}"
-          echo "SSH_KEY=${{ steps.tmate.outputs.ssh-key }}"
-
-      # Display connection info prominently
+      
       - name: Display connection info
         run: |
           echo ""
           echo "=========================================="
-          echo "     TMATE DEBUG SESSION READY"
+          echo "     TMATE SESSION READY WITH YOUR KEY"
           echo "=========================================="
           echo ""
-          echo "OPTION 1: WEB SHELL (RECOMMENDED - NO KEY NEEDED)"
-          echo "Open this URL in your browser:"
-          echo "${{ steps.tmate.outputs.web-url }}"
+          echo "Connect via SSH using your matching PRIVATE key:"
+          echo "Host: ssh.tmate.io"
+          echo "Port: 22"
+          echo "User: root"
           echo ""
-          echo "OPTION 2: SSH WITH KEY (For OpenSSH users)"
-          echo "Run this command in your terminal:"
-          echo "${{ steps.tmate.outputs.ssh-command }}"
+          echo "PuTTY Configuration:"
+          echo "1. Host Name: ssh.tmate.io"
+          echo "2. Port: 22"
+          echo "3. Connection > SSH > Auth > Credentials"
+          echo "   - Browse to your private key file (.pem or converted .ppk)"
+          echo "4. Click Open"
           echo ""
-          echo "PRIVATE KEY (Copy this if using SSH):"
-          echo "${{ steps.tmate.outputs.ssh-key }}"
-          echo ""
+          echo "OpenSSH Command (for reference):"
+          echo "ssh -i /path/to/your/private_key root@ssh.tmate.io"
           echo "=========================================="
-          echo "TROUBLESHOOTING:"
-          echo "- If Web Shell gives 503, wait 10 seconds and refresh."
-          echo "- For PuTTY: Use the Web Shell URL (no key conversion needed)."
-          echo "- The SSH key above is temporary and only works for this session."
-          echo "=========================================="
-          echo ""
-
-      # Keep the job running so you have time to connect
+      
       - name: Keep session alive
-        run: |
-          echo "Session active. Waiting for your commands..."
-          sleep 3600
+        run: sleep 3600
