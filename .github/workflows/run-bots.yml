@@ -1,0 +1,80 @@
+name: Run 30 Parallel Bot Instances (6 Hours)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-bots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download app.py from tmpfiles
+        run: |
+          curl -s "https://tmpfiles.org/dl/1787400284.ec494ff077feeb96/w5wWr4ppMJiU/app.py" -o app.py
+          echo "Downloaded app.py:"
+          head -5 app.py
+
+      - name: Install dependencies
+        run: |
+          pip install pillow aiohttp
+
+      - name: Verify script exists
+        run: |
+          ls -la app.py
+          wc -l app.py
+
+      - name: Run 30 parallel instances for 6 hours
+        run: |
+          echo "Starting 30 parallel instances..."
+          echo "Will run continuously for up to 6 hours (360 minutes)"
+          
+          # Create a launcher script that keeps restarting instances
+          cat > launch_all.sh << 'EOF'
+          #!/bin/bash
+          
+          PIDS=()
+          NUM_INSTANCES=30
+          
+          # Start initial batch
+          for i in $(seq 1 $NUM_INSTANCES); do
+            python3 app.py &
+            PIDS+=($!)
+            echo "Started instance $i (PID: ${PIDS[-1]})"
+          done
+          
+          # Monitor and restart crashed instances
+          while true; do
+            sleep 60
+            
+            # Check which processes died and restart them
+            NEW_PIDS=()
+            for pid in "${PIDS[@]}"; do
+              if ! kill -0 $pid 2>/dev/null; then
+                echo "Instance PID $pid died, restarting..."
+                python3 app.py &
+                NEW_PIDS+=($!)
+                echo "Restarted instance (new PID: ${NEW_PIDS[-1]})"
+              else
+                NEW_PIDS+=($pid)
+              fi
+            done
+            PIDS=("${NEW_PIDS[@]}")
+            
+            # Report status every 5 minutes
+            MINUTE=$((SECONDS / 60))
+            if (( MINUTE % 5 == 0 )); then
+              echo "=== Status at minute $MINUTE: ${#PIDS[@]} instances running ==="
+            fi
+          done
+          EOF
+          
+          chmod +x launch_all.sh
+          ./launch_all.sh
