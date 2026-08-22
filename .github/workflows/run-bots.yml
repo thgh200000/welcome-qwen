@@ -16,11 +16,37 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Download app.py from tmpfiles
+      - name: Download app.py (with HTML detection)
         run: |
-          curl -s "https://tmpfiles.org/dl/1787400284.ec494ff077feeb96/w5wWr4ppMJiU/app.py" -o app.py
-          echo "Downloaded app.py:"
-          head -5 app.py
+          echo "Attempting to download from tmpfiles.org..."
+          curl -L -o app.py "https://tmpfiles.org/dl/1787400284.ec494ff077feeb96/w5wWr4ppMJiU/app.py"
+          
+          # Check if we got HTML instead of Python
+          if grep -q "<!DOCTYPE html>" app.py || grep -q "<html>" app.py; then
+            echo "::error::Failed! tmpfiles.org returned HTML instead of Python code."
+            echo ""
+            echo "RECOMMENDED ALTERNATIVES (No login/signup required):"
+            echo "1. catbox.moe - Upload file, get direct link instantly"
+            echo "2. tebi.io - Simple file hosting with direct links"
+            echo "3. GitHub Gist - Create anonymous gist, use 'Raw' button URL"
+            echo ""
+            echo "Example catbox.moe usage:"
+            echo "  - Go to https://catbox.moe/"
+            echo "  - Upload your app.py file"
+            echo "  - Copy the direct link (ends in .py)"
+            echo "  - Replace the URL in this workflow"
+            exit 1
+          fi
+          
+          if [ ! -s app.py ]; then
+            echo "::error::Downloaded file is empty!"
+            exit 1
+          fi
+          
+          echo "✓ Download successful!"
+          echo "File size: $(wc -c < app.py) bytes"
+          echo "First 10 lines:"
+          head -n 10 app.py
 
       - name: Install dependencies
         run: |
