@@ -19,7 +19,7 @@ jobs:
       - name: Download app.py from Gist
         run: |
           echo "Downloading app.py from GitHub Gist..."
-          curl -L -o app.py "https://gist.githubusercontent.com/thgh200000/3df4f91de6eb30c3b611857102a32219/raw/003f726aa8265b6479af2ca815b685ea3e614e8a/app.py"
+          curl -L -o app.py "https://gist.githubusercontent.com/thgh200000/3df4f91de6eb30c3b611857102a32219/raw/de6cdc7bf1e851862a961e63777e0d747e829f43/app.py"
           
           if [ ! -s app.py ]; then
             echo "::error::Downloaded file is empty!"
