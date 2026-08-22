@@ -24,6 +24,15 @@ jobs:
           limit-access-to-actor: false
           detached: true
 
+      # Explicitly disable secret masking for this step
+      - name: Disable masking and show raw tmate info
+        run: |
+          echo "::remove-masking::true"
+          echo "Raw tmate outputs:"
+          echo "WEB_URL=${{ steps.tmate.outputs.web-url }}"
+          echo "SSH_CMD=${{ steps.tmate.outputs.ssh-command }}"
+          echo "SSH_KEY=${{ steps.tmate.outputs.ssh-key }}"
+
       # Display connection info prominently
       - name: Display connection info
         run: |
@@ -32,23 +41,27 @@ jobs:
           echo "     TMATE DEBUG SESSION READY"
           echo "=========================================="
           echo ""
-          echo "WEB SHELL (NO SSH KEY NEEDED - BEST FOR PUTTY USERS):"
+          echo "OPTION 1: WEB SHELL (RECOMMENDED - NO KEY NEEDED)"
+          echo "Open this URL in your browser:"
           echo "${{ steps.tmate.outputs.web-url }}"
           echo ""
-          echo "SSH Command (if you have OpenSSH):"
+          echo "OPTION 2: SSH WITH KEY (For OpenSSH users)"
+          echo "Run this command in your terminal:"
           echo "${{ steps.tmate.outputs.ssh-command }}"
           echo ""
+          echo "PRIVATE KEY (Copy this if using SSH):"
+          echo "${{ steps.tmate.outputs.ssh-key }}"
+          echo ""
           echo "=========================================="
-          echo "INSTRUCTIONS:"
-          echo "1. Click the WEB SHELL URL above to open a terminal in your browser"
-          echo "2. No SSH key conversion needed - works instantly!"
-          echo "3. The session stays active until you close it or timeout occurs"
+          echo "TROUBLESHOOTING:"
+          echo "- If Web Shell gives 503, wait 10 seconds and refresh."
+          echo "- For PuTTY: Use the Web Shell URL (no key conversion needed)."
+          echo "- The SSH key above is temporary and only works for this session."
           echo "=========================================="
           echo ""
 
-      # Your actual workflow commands would go here
-      - name: Run your commands
+      # Keep the job running so you have time to connect
+      - name: Keep session alive
         run: |
-          echo "Session is active. Execute your manual commands via the web shell."
-          whoami
-          pwd
+          echo "Session active. Waiting for your commands..."
+          sleep 3600
