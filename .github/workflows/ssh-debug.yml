@@ -1,0 +1,54 @@
+name: SSH Debug Session with Web Shell
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable_debug:
+        description: 'Enable tmate debugging session'
+        required: false
+        default: 'true'
+
+jobs:
+  debug-with-tmate:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout your repository (optional)
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Set up tmate session in detached mode to get outputs
+      - name: Setup tmate session
+        id: tmate
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: false
+          detached: true
+
+      # Display connection info prominently
+      - name: Display connection info
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "     TMATE DEBUG SESSION READY"
+          echo "=========================================="
+          echo ""
+          echo "WEB SHELL (NO SSH KEY NEEDED - BEST FOR PUTTY USERS):"
+          echo "${{ steps.tmate.outputs.web-url }}"
+          echo ""
+          echo "SSH Command (if you have OpenSSH):"
+          echo "${{ steps.tmate.outputs.ssh-command }}"
+          echo ""
+          echo "=========================================="
+          echo "INSTRUCTIONS:"
+          echo "1. Click the WEB SHELL URL above to open a terminal in your browser"
+          echo "2. No SSH key conversion needed - works instantly!"
+          echo "3. The session stays active until you close it or timeout occurs"
+          echo "=========================================="
+          echo ""
+
+      # Your actual workflow commands would go here
+      - name: Run your commands
+        run: |
+          echo "Session is active. Execute your manual commands via the web shell."
+          whoami
+          pwd
