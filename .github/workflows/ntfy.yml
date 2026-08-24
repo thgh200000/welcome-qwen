@@ -24,52 +24,67 @@ jobs:
         run: |
           echo "Controller starting. Topic: ${{ env.IPS_TOPIC }}"
           
-          # 1. Get Controller's own IP
+          # 1. Get Controller's own IP and save it
           CTRL_IP=$(curl -s ifconfig.me)
           echo "IP:CTRL:$CTRL_IP" > ip_pool.txt
           echo "Controller IP: $CTRL_IP"
           
-          # 2. Listen to ntfy.sh for the 19 Worker IPs
-          echo "Listening for 19 worker IPs..."
-          curl -s -N "https://ntfy.sh/${{ env.IPS_TOPIC }}/raw" | while read -r MSG; do
-            echo "$MSG" >> ip_pool.txt
-            COUNT=$(wc -l < ip_pool.txt)
-            echo "Received IP. Pool size: $COUNT/20"
-            if [ "$COUNT" -ge 20 ]; then
+          # 2. POLL ntfy.sh for the 19 Worker IPs (Safe, non-blocking loop)
+          echo "Polling for 19 worker IPs..."
+          TIMEOUT=60
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            # Fetch all cached messages from the topic
+            curl -s "https://ntfy.sh/${{ env.IPS_TOPIC }}/json" > current_ips.json
+            
+            # Count how many "IP:" messages we have received
+            COUNT=$(jq -r '.[].message' current_ips.json 2>/dev/null | grep -c '^IP:' || echo 0)
+            echo "Received $COUNT/19 worker IPs. Waiting..."
+            
+            if [ "$COUNT" -ge 19 ]; then
+              # Extract just the IP messages and save them
+              jq -r '.[].message' current_ips.json | grep '^IP:' >> ip_pool.txt
+              echo "All 19 worker IPs received!"
               break
             fi
+            
+            sleep 2
+            ELAPSED=$((ELAPSED + 2))
           done
           
-          # 3. Deduplicate by IP, keep the first 10 unique IDs
-          # Format in file: IP:ID:X.X.X.X -> We want unique X.X.X.X, keep ID
+          if [ "$COUNT" -lt 19 ]; then
+            echo "Warning: Timeout reached. Proceeding with $COUNT worker IPs."
+          fi
+          
+          # 3. Deduplicate by IP (field 3), keep the Worker ID (field 2), take first 10
+          # Total pool is now 20 (1 controller + 19 workers)
           awk -F: '{print $3, $2}' ip_pool.txt | sort -u -k1,1 | head -n 10 | awk '{print $2}' > winners.txt
           
           WINNER_COUNT=$(wc -l < winners.txt)
-          echo "Found $WINNER_COUNT unique IPs."
+          echo "Found $WINNER_COUNT unique IPs out of 20 total."
           
           if [ "$WINNER_COUNT" -lt 10 ]; then
-            echo "Error: Not enough unique IPs!"
+            echo "Error: Not enough unique IPs found!"
             exit 1
           fi
 
       - name: Send Commands via ntfy.sh
         run: |
-          echo "Sending EXECUTE commands to 10 winners..."
+          echo "Sending EXECUTE commands to $WINNER_COUNT winners..."
           while read -r WINNER_ID; do
-            # Find the IP for this winning ID
             WINNER_IP=$(grep ":$WINNER_ID:" ip_pool.txt | head -n 1 | cut -d: -f3)
-            echo "Sending EXECUTE to $WINNER_IP (ID: $WINNER_ID)"
-            curl -d "CMD:$WINNER_IP:EXECUTE" "https://ntfy.sh/${{ env.CMDS_TOPIC }}"
+            echo " -> EXECUTE to $WINNER_IP (ID: $WINNER_ID)"
+            curl -s -d "CMD:$WINNER_IP:EXECUTE" "https://ntfy.sh/${{ env.CMDS_TOPIC }}"
           done < winners.txt
           
-          echo "Sending TERMINATE commands to 9 losers..."
+          echo "Sending TERMINATE commands to losers..."
           # Find all IDs that are NOT in winners.txt
           awk -F: '{print $2}' ip_pool.txt | sort | comm -23 - <(sort winners.txt) > losers.txt
           
           while read -r LOSER_ID; do
             LOSER_IP=$(grep ":$LOSER_ID:" ip_pool.txt | head -n 1 | cut -d: -f3)
-            echo "Sending TERMINATE to $LOSER_IP (ID: $LOSER_ID)"
-            curl -d "CMD:$LOSER_IP:TERMINATE" "https://ntfy.sh/${{ env.CMDS_TOPIC }}"
+            echo " -> TERMINATE to $LOSER_IP (ID: $LOSER_ID)"
+            curl -s -d "CMD:$LOSER_IP:TERMINATE" "https://ntfy.sh/${{ env.CMDS_TOPIC }}"
           done < losers.txt
           
           echo "All commands sent. Controller done."
@@ -80,7 +95,7 @@ jobs:
   workers:
     name: Worker ${{ matrix.id }}
     runs-on: ubuntu-latest
-    needs: controller # Wait for controller to start so topic is active (optional, but good practice)
+    # REMOVED 'needs: controller' -> THIS IS THE KEY TO TRUE PARALLEL EXECUTION
     strategy:
       matrix:
         id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
@@ -100,20 +115,37 @@ jobs:
           echo "Worker ${{ matrix.id }} IP: $MY_IP"
           
           # 2. Publish my IP to the controller via ntfy.sh
-          curl -d "IP:${{ matrix.id }}:$MY_IP" "https://ntfy.sh/${{ env.IPS_TOPIC }}"
+          curl -s -d "IP:${{ matrix.id }}:$MY_IP" "https://ntfy.sh/${{ env.IPS_TOPIC }}"
           
-          # 3. Listen for my specific command from the controller
-          # ntfy.sh caches messages, so even if the controller already sent it, we will receive it here.
-          echo "Waiting for command from controller..."
-          CMD=$(curl -s -N "https://ntfy.sh/${{ env.CMDS_TOPIC }}/raw" | grep -m 1 "CMD:$MY_IP:")
+          # 3. POLL for my specific command (Safe, non-blocking loop)
+          echo "Waiting for command from controller for IP: $MY_IP..."
+          TIMEOUT=120
+          ELAPSED=0
+          ACTION=""
           
-          ACTION=$(echo "$CMD" | cut -d: -f3)
-          echo "Received command: $ACTION"
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            # Fetch all messages and look for one targeted at our specific IP
+            MSG=$(curl -s "https://ntfy.sh/${{ env.CMDS_TOPIC }}/json" | jq -r --arg ip "$MY_IP" '.[].message | select(startswith("CMD:" + $ip + ":"))' | head -n 1)
+            
+            if [ -n "$MSG" ]; then
+              ACTION=$(echo "$MSG" | cut -d: -f3)
+              echo "Received command: $ACTION"
+              break
+            fi
+            
+            sleep 2
+            ELAPSED=$((ELAPSED + 2))
+          done
+          
+          if [ -z "$ACTION" ]; then
+            echo "Timeout waiting for command. Exiting."
+            exit 1
+          fi
           
           # 4. Execute or Tear Down
           if [ "$ACTION" == "EXECUTE" ]; then
             echo "=========================================="
-            echo "I am one of the 10 unique IPs! Running script..."
+            echo "I am one of the unique IPs! Running script..."
             echo "=========================================="
             # Script is executed exactly as-is, with no internal modifications
             curl -L -o app.py "https://gist.githubusercontent.com/thgh200000/3df4f91de6eb30c3b611857102a32219/raw/a9d6d2560903228ad2e4130c13b3de626a82b7a7/app.py"
