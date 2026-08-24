@@ -1,6 +1,9 @@
 name: Run 30 Parallel Bot Instances (6 Hours)
 
 on:
+  schedule:
+    - cron: '30 20 * * *'   # 1st Run: Starts 02:00 AM IST (Night time)
+    - cron: '30 5 * * *'    # 2nd Run: Starts 11:00 AM IST (After 3hr buffer)
   workflow_dispatch:
 
 jobs:
